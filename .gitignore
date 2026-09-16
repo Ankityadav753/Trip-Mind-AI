@@ -26,3 +26,9 @@ dist-ssr
 # Environment variables
 .env
 .env*.local
+
+# Temporary scratch test files & CLI artifacts
+scratch/
+supabase/.temp/
+.temp/
+

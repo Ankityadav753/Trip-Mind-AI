@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { useActiveTrip, useSavedTrips } from '../hooks/useLocalStorage';
+import { useAuth } from '../context/AuthContext';
 import { useToast } from '../hooks/useToast';
 import { updatePageMeta } from '../utils/seo';
 import { exportTripAsJSON, triggerPrint } from '../utils/exportHelpers';
@@ -14,14 +15,23 @@ import InteractiveMap from '../components/map/InteractiveMap';
 import FloatingAssistant from '../components/assistant/FloatingAssistant';
 import ShareModal from '../components/itinerary/ShareModal';
 import RegionalFoodGuide from '../components/Recommendations/RegionalFoodGuide';
-import PackingAssistant from '../components/Itinerary/PackingAssistant';
+import PackingAssistant from '../components/itinerary/PackingAssistant';
 import { Compass, Sparkles, Plus, AlertCircle } from 'lucide-react';
+import {
+  fetchPackingItemsFromSupabase,
+  seedPackingItemsToSupabase,
+  addPackingItemToSupabase,
+  togglePackingItemInSupabase,
+  deletePackingItemFromSupabase
+} from '../services/packingService';
+import { isUuid, fetchTripById } from '../services/tripService';
 
 export default function Itinerary() {
   const [searchParams] = useSearchParams();
   const tripIdParam = searchParams.get('id');
   const [activeTrip, setActiveTrip] = useActiveTrip();
   const { trips, saveTrip, getTrip } = useSavedTrips();
+  const { user } = useAuth();
   const { addToast } = useToast();
 
   const [currentTrip, setCurrentTrip] = useState(activeTrip);
@@ -30,23 +40,61 @@ export default function Itinerary() {
   );
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [mapHighlight, setMapHighlight] = useState(null);
+  const [isLoadingTrip, setIsLoadingTrip] = useState(Boolean(tripIdParam));
 
   const mapRef = useRef(null);
 
-  // Sync trip if query parameter ?id=... is specified
+  // Sync trip if query parameter ?id=... is specified, fetching complete day-wise trip from Supabase when available
   useEffect(() => {
-    if (tripIdParam) {
-      const found = getTrip(tripIdParam);
-      if (found) {
-        setCurrentTrip(found);
-        setActiveTrip(found);
-        if (found.currency) setCurrency(found.currency);
+    let isCancelled = false;
+
+    async function loadTargetTrip() {
+      if (tripIdParam) {
+        setIsLoadingTrip(true);
+        // 1. If ID is a UUID, attempt to fetch complete day-wise itinerary directly from Supabase
+        if (isUuid(tripIdParam)) {
+          try {
+            const cloudTrip = await fetchTripById(tripIdParam);
+            if (!isCancelled && cloudTrip) {
+              setCurrentTrip(cloudTrip);
+              setActiveTrip(cloudTrip);
+              if (cloudTrip.currency) setCurrency(cloudTrip.currency);
+              setIsLoadingTrip(false);
+              return;
+            }
+          } catch (err) {
+            console.warn('TripMind AI: Failed to load trip from Supabase by ID:', err);
+          }
+        }
+
+        // 2. Fallback to loaded trips in context or localStorage
+        const found = getTrip(tripIdParam);
+        if (!isCancelled && found) {
+          setCurrentTrip(found);
+          setActiveTrip(found);
+          if (found.currency) setCurrency(found.currency);
+          setIsLoadingTrip(false);
+          return;
+        }
+
+        if (!isCancelled) {
+          setIsLoadingTrip(false);
+        }
+      } else if (activeTrip) {
+        setCurrentTrip(activeTrip);
+        if (activeTrip.currency) setCurrency(activeTrip.currency);
+        setIsLoadingTrip(false);
+      } else {
+        setIsLoadingTrip(false);
       }
-    } else if (activeTrip) {
-      setCurrentTrip(activeTrip);
-      if (activeTrip.currency) setCurrency(activeTrip.currency);
     }
-  }, [tripIdParam, activeTrip]);
+
+    loadTargetTrip();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [tripIdParam, trips]);
 
   useEffect(() => {
     if (currentTrip?.destination) {
@@ -56,6 +104,17 @@ export default function Itinerary() {
       );
     }
   }, [currentTrip]);
+
+  if (isLoadingTrip) {
+    return (
+      <div className="min-h-[70vh] flex flex-col items-center justify-center p-6 text-center space-y-4">
+        <div className="w-12 h-12 border-4 border-brand-teal border-t-transparent rounded-full animate-spin"></div>
+        <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">
+          Loading itinerary from cloud...
+        </p>
+      </div>
+    );
+  }
 
   if (!currentTrip) {
     return (
@@ -82,24 +141,56 @@ export default function Itinerary() {
     );
   }
 
-  const isAlreadySaved = trips.some(t => t.id === currentTrip.id);
+  const isAlreadySaved = trips.some((t) => t.id === currentTrip?.id);
+  const isTripSavedInCloudOrLocal =
+    isAlreadySaved ||
+    Boolean(currentTrip?.isSupabase) ||
+    Boolean(user?.id && isUuid(currentTrip?.id));
 
-  const handleSave = () => {
-    saveTrip(currentTrip);
-    addToast({
-      type: 'success',
-      title: 'Trip Saved!',
-      message: `"${currentTrip.destination}" is saved to My Trips.`
-    });
+  const handleSave = async () => {
+    try {
+      const saved = await saveTrip(currentTrip);
+      if (saved?.id) {
+        setCurrentTrip(saved);
+        setActiveTrip(saved);
+      }
+      addToast({
+        type: 'success',
+        title: user ? 'Trip Saved to Cloud!' : 'Trip Saved!',
+        message: user
+          ? `"${currentTrip.destination}" is synced with your Supabase account.`
+          : `"${currentTrip.destination}" is saved to My Trips.`
+      });
+    } catch (err) {
+      console.error('Trip save error:', err);
+      addToast({
+        type: 'error',
+        title: 'Save Failed',
+        message: err.message || 'Could not save trip to Supabase.'
+      });
+    }
   };
 
-  const handleUpdateDay = (dayNumber, updatedDay) => {
+  const handleUpdateDay = async (dayNumber, updatedDay) => {
     const updatedDays = currentTrip.days.map((d) =>
       d.dayNumber === dayNumber ? updatedDay : d
     );
     const updatedTrip = { ...currentTrip, days: updatedDays };
     setCurrentTrip(updatedTrip);
     setActiveTrip(updatedTrip);
+
+    // If already saved in portfolio or Supabase, auto-persist updates
+    if (isTripSavedInCloudOrLocal) {
+      try {
+        const saved = await saveTrip(updatedTrip);
+        if (saved?.id) {
+          setCurrentTrip(saved);
+          setActiveTrip(saved);
+        }
+      } catch (err) {
+        console.warn('TripMind AI: background trip update sync warning:', err);
+      }
+    }
 
     addToast({
       type: 'info',
@@ -159,18 +250,134 @@ export default function Itinerary() {
     { id: 'p7', item: 'Light jacket / Shawl for AC transit', category: 'Clothing', packed: false }
   ];
 
-  const packingList = currentTrip.packingList || defaultPackingList;
+  const [packingList, setPackingList] = useState(
+    () => currentTrip?.packingList || defaultPackingList
+  );
+  const [isPackingLoading, setIsPackingLoading] = useState(false);
+  const [isPackingCloudSynced, setIsPackingCloudSynced] = useState(false);
 
-  const handleTogglePackingItem = (id) => {
-    const updatedList = packingList.map(i =>
-      i.id === id ? { ...i, packed: !i.packed } : i
+  // Sync packing items from Supabase when user is authenticated and trip has a UUID
+  useEffect(() => {
+    let isCancelled = false;
+
+    const syncPackingFromSupabase = async () => {
+      if (!currentTrip?.id) return;
+
+      if (user?.id && isUuid(currentTrip.id)) {
+        setIsPackingLoading(true);
+        try {
+          const cloudItems = await fetchPackingItemsFromSupabase(currentTrip.id);
+          if (isCancelled) return;
+
+          if (cloudItems && cloudItems.length > 0) {
+            setPackingList(cloudItems);
+            setIsPackingCloudSynced(true);
+          } else {
+            // Seed base items into Supabase for this trip
+            const baseItems = currentTrip.packingList && currentTrip.packingList.length > 0
+              ? currentTrip.packingList
+              : defaultPackingList;
+            const seeded = await seedPackingItemsToSupabase(currentTrip.id, baseItems);
+            if (isCancelled) return;
+            setPackingList(seeded);
+            setIsPackingCloudSynced(true);
+          }
+        } catch (err) {
+          console.warn('TripMind AI: Supabase packing items fetch error, using local fallback:', err);
+          if (!isCancelled) {
+            setPackingList(currentTrip.packingList || defaultPackingList);
+            setIsPackingCloudSynced(false);
+          }
+        } finally {
+          if (!isCancelled) setIsPackingLoading(false);
+        }
+      } else {
+        setPackingList(currentTrip.packingList || defaultPackingList);
+        setIsPackingCloudSynced(false);
+        setIsPackingLoading(false);
+      }
+    };
+
+    syncPackingFromSupabase();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [currentTrip?.id, user?.id]);
+
+  const handleTogglePackingItem = async (id) => {
+    const itemToToggle = packingList.find((i) => i.id === id);
+    if (!itemToToggle) return;
+
+    const newPackedState = !itemToToggle.packed;
+
+    // Optimistic UI state update
+    const updatedList = packingList.map((i) =>
+      i.id === id ? { ...i, packed: newPackedState } : i
     );
+    setPackingList(updatedList);
+
     const updatedTrip = { ...currentTrip, packingList: updatedList };
     setCurrentTrip(updatedTrip);
     setActiveTrip(updatedTrip);
+
+    // Sync to Supabase if authenticated and item is in database
+    if (user?.id && isUuid(currentTrip?.id) && isUuid(id)) {
+      try {
+        await togglePackingItemInSupabase(id, newPackedState);
+      } catch (err) {
+        console.error('Failed to sync packing toggle to Supabase:', err);
+        addToast({
+          type: 'warning',
+          title: 'Sync Warning',
+          message: 'Saved in session; cloud sync temporarily unavailable.'
+        });
+      }
+    }
   };
 
-  const handleAddPackingItem = (text, category) => {
+  const handleAddPackingItem = async (text, category) => {
+    if (!text.trim()) return;
+
+    // If authenticated, persist to Supabase
+    if (user?.id) {
+      let tripId = currentTrip?.id;
+      let activeTripRef = currentTrip;
+
+      // If the trip doesn't have a database UUID yet, ensure it is saved
+      if (!isUuid(tripId)) {
+        try {
+          const savedTrip = await saveTrip(currentTrip);
+          if (savedTrip?.id) {
+            tripId = savedTrip.id;
+            activeTripRef = savedTrip;
+            setCurrentTrip(savedTrip);
+            setActiveTrip(savedTrip);
+          }
+        } catch (tripSaveErr) {
+          console.warn('Could not auto-save trip to Supabase for packing item:', tripSaveErr);
+        }
+      }
+
+      if (isUuid(tripId)) {
+        try {
+          const cloudItem = await addPackingItemToSupabase(tripId, text, category);
+          const updatedList = [...packingList, cloudItem];
+          setPackingList(updatedList);
+          setIsPackingCloudSynced(true);
+
+          const updatedTrip = { ...activeTripRef, packingList: updatedList };
+          setCurrentTrip(updatedTrip);
+          setActiveTrip(updatedTrip);
+          return;
+        } catch (err) {
+          console.error('Failed to add packing item to Supabase:', err);
+          // Fallback to local item creation below
+        }
+      }
+    }
+
+    // LocalStorage fallback
     const newItem = {
       id: `pack-${Date.now()}`,
       item: text,
@@ -178,16 +385,45 @@ export default function Itinerary() {
       packed: false
     };
     const updatedList = [...packingList, newItem];
+    setPackingList(updatedList);
+
     const updatedTrip = { ...currentTrip, packingList: updatedList };
     setCurrentTrip(updatedTrip);
     setActiveTrip(updatedTrip);
   };
 
-  const handleRemovePackingItem = (id) => {
-    const updatedList = packingList.filter(i => i.id !== id);
+  const handleRemovePackingItem = async (id) => {
+    // Optimistic UI state update
+    const updatedList = packingList.filter((i) => i.id !== id);
+    setPackingList(updatedList);
+
     const updatedTrip = { ...currentTrip, packingList: updatedList };
     setCurrentTrip(updatedTrip);
     setActiveTrip(updatedTrip);
+
+    // Sync to Supabase if authenticated and item is in database
+    if (user?.id && isUuid(id)) {
+      try {
+        await deletePackingItemFromSupabase(id);
+      } catch (err) {
+        console.error('Failed to delete packing item from Supabase:', err);
+        addToast({
+          type: 'warning',
+          title: 'Sync Warning',
+          message: 'Item removed locally; cloud sync failed.'
+        });
+      }
+    }
+  };
+
+  const handleWeatherUpdate = (newWeather) => {
+    if (!newWeather) return;
+    setCurrentTrip((prev) => {
+      if (!prev) return prev;
+      const updated = { ...prev, weatherSummary: newWeather };
+      setActiveTrip(updated);
+      return updated;
+    });
   };
 
   return (
@@ -195,7 +431,7 @@ export default function Itinerary() {
       {/* 1. Header Banner & Stats */}
       <ItineraryHeader
         trip={currentTrip}
-        isSaved={isAlreadySaved}
+        isSaved={isTripSavedInCloudOrLocal}
         onSave={handleSave}
         onShare={() => setShareModalOpen(true)}
         onExport={() => exportTripAsJSON(currentTrip)}
@@ -205,7 +441,14 @@ export default function Itinerary() {
       />
 
       {/* 2. Destination Weather Forecast */}
-      <WeatherWidget weather={currentTrip.weatherSummary} />
+      <WeatherWidget
+        weather={currentTrip.weatherSummary}
+        destination={currentTrip.destination || currentTrip.city}
+        coordinates={currentTrip.coordinates}
+        startDate={currentTrip.startDate}
+        endDate={currentTrip.endDate}
+        onWeatherUpdate={handleWeatherUpdate}
+      />
 
       {/* Main Content Layout: Timeline on Left, Map & Budget on Right */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
@@ -273,6 +516,8 @@ export default function Itinerary() {
           onToggleItem={handleTogglePackingItem}
           onAddItem={handleAddPackingItem}
           onRemoveItem={handleRemovePackingItem}
+          isCloudSynced={isPackingCloudSynced}
+          isLoading={isPackingLoading}
         />
       </div>
 

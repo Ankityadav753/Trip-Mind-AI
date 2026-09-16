@@ -32,6 +32,21 @@ const INDIA_CATEGORIES = [
 const INTL_REGIONS = ['All', 'Europe', 'Asia', 'Middle East', 'Americas', 'Oceania'];
 const INTL_STYLES = ['All', 'culture', 'food', 'nature', 'relaxation', 'adventure', 'nightlife'];
 
+/**
+ * Safely normalizes and formats bestMonths regardless of whether
+ * the destination data provides an array of month names or a formatted string.
+ */
+function formatBestMonths(bestMonths) {
+  if (!bestMonths) return 'Year-Round';
+  if (Array.isArray(bestMonths)) {
+    return bestMonths.slice(0, 3).join(', ');
+  }
+  if (typeof bestMonths === 'string') {
+    return bestMonths;
+  }
+  return String(bestMonths);
+}
+
 export default function Explore() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -262,7 +277,7 @@ export default function Explore() {
                   <div className="text-xs text-slate-500 dark:text-slate-400 space-y-1">
                     <div className="flex items-center gap-1">
                       <Calendar className="w-3.5 h-3.5 text-brand-teal shrink-0" />
-                      <span>Best: <strong className="text-slate-700 dark:text-slate-300">{dest.bestMonths?.slice(0, 3).join(', ')}</strong></span>
+                      <span>Best: <strong className="text-slate-700 dark:text-slate-300">{formatBestMonths(dest.bestMonths)}</strong></span>
                     </div>
                     <div className="truncate">
                       <span>Cuisine: <strong className="text-slate-700 dark:text-slate-300">{dest.cuisine?.slice(0, 2).join(', ')}</strong></span>
@@ -339,7 +354,7 @@ export default function Explore() {
                   <div className="text-xs text-slate-500 dark:text-slate-400 space-y-1">
                     <div className="flex items-center gap-1">
                       <Calendar className="w-3.5 h-3.5 text-brand-sky shrink-0" />
-                      <span>Best: <strong className="text-slate-700 dark:text-slate-300">{dest.bestMonths?.slice(0, 3).join(', ')}</strong></span>
+                      <span>Best: <strong className="text-slate-700 dark:text-slate-300">{formatBestMonths(dest.bestMonths)}</strong></span>
                     </div>
                     <div className="truncate">
                       <span>Attractions: <strong className="text-slate-700 dark:text-slate-300">{dest.popularAttractions?.slice(0, 2).join(', ')}</strong></span>

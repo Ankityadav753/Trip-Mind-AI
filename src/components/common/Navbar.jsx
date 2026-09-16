@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Sparkles, Compass, Moon, Sun, Menu, X, Bookmark, Globe } from 'lucide-react';
 import { useTheme } from '../../hooks/useTheme';
 import { useSavedTrips } from '../../hooks/useLocalStorage';
+import { useAuth } from '../../context/AuthContext';
 import AuthModal from './AuthModal';
 
 export default function Navbar({ travelType = 'india', onTravelTypeChange }) {
@@ -10,6 +11,7 @@ export default function Navbar({ travelType = 'india', onTravelTypeChange }) {
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
   const { trips } = useSavedTrips();
+  const { user, signOut, isAuthenticated } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [authModalOpen, setAuthModalOpen] = useState(false);
 
@@ -118,13 +120,32 @@ export default function Navbar({ travelType = 'india', onTravelTypeChange }) {
               {theme === 'dark' ? <Sun className="w-5 h-5 text-amber-400" /> : <Moon className="w-5 h-5 text-slate-600" />}
             </button>
 
-            {/* Sign In Button */}
-            <button
-              onClick={() => setAuthModalOpen(true)}
-              className="hidden sm:inline-flex px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-navy-900 transition-colors"
-            >
-              Sign In
-            </button>
+            {/* User Profile / Sign In */}
+            {isAuthenticated ? (
+              <div className="hidden sm:flex items-center gap-2">
+                <span
+                  className="text-xs font-semibold px-2.5 py-1.5 rounded-xl bg-brand-teal/10 text-brand-teal border border-brand-teal/20 flex items-center gap-1.5 max-w-[150px] truncate"
+                  title={user.email}
+                >
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
+                  <span className="truncate">{user.user_metadata?.full_name || user.email?.split('@')[0]}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => signOut()}
+                  className="px-2.5 py-1.5 text-xs font-semibold text-slate-500 hover:text-rose-500 dark:hover:text-rose-400 rounded-xl hover:bg-slate-100 dark:hover:bg-navy-900 transition-colors"
+                >
+                  Sign Out
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setAuthModalOpen(true)}
+                className="hidden sm:inline-flex px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-navy-900 transition-colors"
+              >
+                Sign In
+              </button>
+            )}
 
             {/* Start Planning CTA */}
             <Link
@@ -191,15 +212,32 @@ export default function Navbar({ travelType = 'india', onTravelTypeChange }) {
             ))}
 
             <div className="pt-2 border-t border-slate-100 dark:border-navy-800 flex items-center justify-between">
-              <button
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  setAuthModalOpen(true);
-                }}
-                className="text-sm font-medium text-slate-700 dark:text-slate-300 py-2"
-              >
-                Sign In
-              </button>
+              {isAuthenticated ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-brand-teal truncate max-w-[130px]">
+                    {user.user_metadata?.full_name || user.email?.split('@')[0]}
+                  </span>
+                  <button
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      signOut();
+                    }}
+                    className="text-xs text-rose-500 hover:underline py-1 font-semibold"
+                  >
+                    Sign Out
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    setAuthModalOpen(true);
+                  }}
+                  className="text-sm font-medium text-slate-700 dark:text-slate-300 py-2"
+                >
+                  Sign In
+                </button>
+              )}
               <button
                 onClick={toggleTheme}
                 className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 py-2"

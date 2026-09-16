@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { ToastProvider } from './hooks/useToast';
+import { AuthProvider } from './context/AuthContext';
 import Navbar from './components/common/Navbar';
 import Footer from './components/common/Footer';
 import Home from './pages/Home';
@@ -43,10 +44,11 @@ export default function App() {
 
   return (
     <ToastProvider>
-      <BrowserRouter>
-        <ScrollToTop />
-        <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 dark:bg-navy-950 dark:text-slate-100 transition-colors duration-300">
-          <Navbar />
+      <AuthProvider>
+        <BrowserRouter>
+          <ScrollToTop />
+          <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 dark:bg-navy-950 dark:text-slate-100 transition-colors duration-300">
+            <Navbar />
           <main className="flex-1">
             <Routes>
               <Route path="/" element={<Home />} />
@@ -69,7 +71,8 @@ export default function App() {
             onSavePreferences={handleSaveOnboarding}
           />
         </div>
-      </BrowserRouter>
+        </BrowserRouter>
+      </AuthProvider>
     </ToastProvider>
   );
 }

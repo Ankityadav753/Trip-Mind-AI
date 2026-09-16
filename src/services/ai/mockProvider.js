@@ -54,7 +54,7 @@ export async function generateItineraryMock(preferences) {
   }
 
   // Weather
-  const weather = await getDestinationWeather(matched.city);
+  const weather = await getDestinationWeather(matched.city, matched.coordinates, { startDate, endDate });
 
   // Recommendations
   const recommendations = createMockRecommendations(matched, travelType);

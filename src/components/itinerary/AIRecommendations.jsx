@@ -1,11 +1,24 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Sparkles, Star, Bed, Utensils, Landmark, Compass, Bookmark, Plus, Check } from 'lucide-react';
 import AIConfidenceBadge from '../common/AIConfidenceBadge';
 import { useToast } from '../../hooks/useToast';
+import { useAuth } from '../../context/AuthContext';
+import { useActiveTrip } from '../../hooks/useLocalStorage';
+import {
+  fetchUserFavoritePlaces,
+  addFavoritePlace,
+  removeFavoritePlace,
+  loadLocalFavorites,
+  saveLocalFavorites
+} from '../../services/favoritePlacesService';
 
-export default function AIRecommendations({ recommendations = {}, onAddToDay }) {
+export default function AIRecommendations({ recommendations = {}, onAddToDay, trip: propTrip }) {
   const [activeTab, setActiveTab] = useState('hotels');
   const [savedItems, setSavedItems] = useState({});
+  const { user } = useAuth();
+  const [activeTrip] = useActiveTrip();
+  const trip = propTrip || activeTrip;
+  const tripId = trip?.id;
   const { addToast } = useToast();
 
   const tabs = [
@@ -18,18 +31,102 @@ export default function AIRecommendations({ recommendations = {}, onAddToDay }) 
   const currentTabObj = tabs.find(t => t.id === activeTab) || tabs[0];
   const items = currentTabObj.items;
 
-  const toggleSave = (id, name) => {
-    setSavedItems((prev) => {
-      const next = { ...prev, [id]: !prev[id] };
-      if (next[id]) {
-        addToast({
-          type: 'success',
-          title: 'Saved to Bookmarks',
-          message: `Added "${name}" to your trip favorites.`
-        });
+  // Load user's favorite places from Supabase or localStorage
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function loadFavorites() {
+      if (user?.id) {
+        try {
+          const cloudFavorites = await fetchUserFavoritePlaces(user.id, tripId);
+          if (isCancelled) return;
+          const map = {};
+          (cloudFavorites || []).forEach((fav) => {
+            if (fav.place_name) {
+              map[fav.place_name] = fav.id;
+            }
+          });
+          setSavedItems(map);
+          return;
+        } catch (err) {
+          console.warn('TripMind AI: Failed to load cloud favorites, falling back to local:', err);
+        }
       }
-      return next;
-    });
+
+      if (!isCancelled) {
+        setSavedItems(loadLocalFavorites(tripId));
+      }
+    }
+
+    loadFavorites();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [user?.id, tripId]);
+
+  const toggleSave = async (id, name, itemObj = null) => {
+    const isCurrentlySaved = Boolean(savedItems[name] || savedItems[id]);
+    const targetItem = itemObj || items.find((i) => i.id === id || i.name === name) || { id, name };
+
+    if (isCurrentlySaved) {
+      // 1. Optimistically remove from state
+      setSavedItems((prev) => {
+        const next = { ...prev };
+        delete next[name];
+        delete next[id];
+        if (!user?.id) saveLocalFavorites(next);
+        return next;
+      });
+
+      // 2. Remove from Supabase if authenticated
+      if (user?.id) {
+        try {
+          const recordId = savedItems[name] || savedItems[id];
+          await removeFavoritePlace(user.id, recordId || name, tripId);
+        } catch (err) {
+          console.error('TripMind AI: Failed to remove favorite from Supabase:', err);
+        }
+      }
+
+      addToast({
+        type: 'info',
+        title: 'Removed from Favorites',
+        message: `Removed "${name}" from your trip favorites.`
+      });
+    } else {
+      // 1. Optimistically add to state
+      setSavedItems((prev) => {
+        const next = { ...prev, [name]: true, [id]: true };
+        if (!user?.id) saveLocalFavorites(next);
+        return next;
+      });
+
+      // 2. Add to Supabase if authenticated
+      if (user?.id) {
+        try {
+          const savedRow = await addFavoritePlace(user.id, tripId, {
+            ...targetItem,
+            category: activeTab
+          });
+          if (savedRow?.id) {
+            setSavedItems((prev) => ({
+              ...prev,
+              [name]: savedRow.id,
+              [id]: savedRow.id
+            }));
+          }
+        } catch (err) {
+          console.error('TripMind AI: Failed to add favorite to Supabase:', err);
+        }
+      }
+
+      addToast({
+        type: 'success',
+        title: 'Saved to Bookmarks',
+        message: `Added "${name}" to your trip favorites.`
+      });
+    }
   };
 
   return (
@@ -81,7 +178,7 @@ export default function AIRecommendations({ recommendations = {}, onAddToDay }) 
       {/* Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {items.map((item) => {
-          const isBookmarked = !!savedItems[item.id];
+          const isBookmarked = Boolean(savedItems[item.name] || savedItems[item.id]);
 
           return (
             <div
@@ -111,7 +208,7 @@ export default function AIRecommendations({ recommendations = {}, onAddToDay }) 
                   </div>
 
                   <button
-                    onClick={() => toggleSave(item.id, item.name)}
+                    onClick={() => toggleSave(item.id, item.name, item)}
                     className={`absolute top-3 right-3 p-2 rounded-xl backdrop-blur-md transition-all ${
                       isBookmarked
                         ? 'bg-brand-teal text-white'
@@ -169,7 +266,7 @@ export default function AIRecommendations({ recommendations = {}, onAddToDay }) 
                     if (onAddToDay) {
                       onAddToDay(item);
                     } else {
-                      toggleSave(item.id, item.name);
+                      toggleSave(item.id, item.name, item);
                     }
                   }}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-brand-teal bg-brand-teal/10 hover:bg-brand-teal/20 transition-colors"

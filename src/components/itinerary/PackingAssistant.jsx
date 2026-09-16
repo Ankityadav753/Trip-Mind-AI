@@ -2,7 +2,14 @@ import React, { useState } from 'react';
 import { CheckSquare, Square, Plus, Trash2, Luggage, Sparkles, CheckCircle2 } from 'lucide-react';
 import { useToast } from '../../hooks/useToast';
 
-export default function PackingAssistant({ packingList = [], onToggleItem, onAddItem, onRemoveItem }) {
+export default function PackingAssistant({
+  packingList = [],
+  onToggleItem,
+  onAddItem,
+  onRemoveItem,
+  isCloudSynced = false,
+  isLoading = false
+}) {
   const [newItemText, setNewItemText] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Essentials');
   const { addToast } = useToast();
@@ -35,6 +42,12 @@ export default function PackingAssistant({ packingList = [], onToggleItem, onAdd
             <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-brand-teal/10 text-brand-teal border border-brand-teal/20 font-bold">
               AI Tailored
             </span>
+            {isCloudSynced && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-semibold flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                <span>Cloud Synced</span>
+              </span>
+            )}
           </div>
           <h3 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
             <span>🎒 AI Packing Assistant</span>
@@ -51,7 +64,11 @@ export default function PackingAssistant({ packingList = [], onToggleItem, onAdd
             <div className="text-sm font-extrabold text-brand-teal">{packedCount} / {totalCount} Items</div>
           </div>
           <div className="w-10 h-10 rounded-full border-2 border-brand-teal/30 flex items-center justify-center text-xs font-bold text-slate-900 dark:text-white">
-            {progressPercent}%
+            {isLoading ? (
+              <span className="w-4 h-4 border-2 border-brand-teal border-t-transparent rounded-full animate-spin"></span>
+            ) : (
+              `${progressPercent}%`
+            )}
           </div>
         </div>
       </div>

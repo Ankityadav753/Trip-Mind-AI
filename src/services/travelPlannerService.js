@@ -1,6 +1,6 @@
 /**
  * TripMind AI - Travel Planner Service Orchestrator
- * Seamlessly routes between Mock, OpenAI, and Gemini providers.
+ * Seamlessly routes between Gemini (via Supabase Edge Gateway), OpenAI, and Mock providers.
  */
 
 import {
@@ -10,13 +10,17 @@ import {
   suggestDestinationsMock
 } from './ai/mockProvider';
 import { generateItineraryOpenAI, regenerateDayOpenAI } from './ai/openaiProvider';
-import { generateItineraryGemini, regenerateDayGemini } from './ai/geminiProvider';
+import {
+  generateItineraryGemini,
+  regenerateDayGemini,
+  askAssistantGemini
+} from './ai/geminiProvider';
 
 function getActiveProvider() {
-  const provider = (import.meta.env.VITE_AI_PROVIDER || 'mock').toLowerCase();
+  const provider = (import.meta.env.VITE_AI_PROVIDER || 'gemini').toLowerCase();
+  if (provider === 'mock') return 'mock';
   if (provider === 'openai') return 'openai';
-  if (provider === 'gemini') return 'gemini';
-  return 'mock';
+  return 'gemini';
 }
 
 export async function generateItinerary(preferences) {
@@ -24,11 +28,11 @@ export async function generateItinerary(preferences) {
   switch (provider) {
     case 'openai':
       return generateItineraryOpenAI(preferences);
-    case 'gemini':
-      return generateItineraryGemini(preferences);
     case 'mock':
-    default:
       return generateItineraryMock(preferences);
+    case 'gemini':
+    default:
+      return generateItineraryGemini(preferences);
   }
 }
 
@@ -37,11 +41,11 @@ export async function regenerateDay(currentDay, tripContext, modificationType) {
   switch (provider) {
     case 'openai':
       return regenerateDayOpenAI(currentDay, tripContext, modificationType);
-    case 'gemini':
-      return regenerateDayGemini(currentDay, tripContext, modificationType);
     case 'mock':
-    default:
       return regenerateDayMock(currentDay, tripContext, modificationType);
+    case 'gemini':
+    default:
+      return regenerateDayGemini(currentDay, tripContext, modificationType);
   }
 }
 
@@ -55,14 +59,37 @@ export function suggestDestinations(preferences) {
 
 /**
  * Interactive Natural Language Assistant Engine ("✦ Ask TripMind AI")
+ * First attempts to query Gemini via the Supabase Edge Function gateway.
+ * If unauthenticated or if the Edge Function is unavailable, gracefully falls back
+ * to the built-in heuristic assistant.
  */
 export async function askAssistant(userPrompt, tripContext) {
+  const provider = getActiveProvider();
+
+  if (provider !== 'mock') {
+    try {
+      const realAiResponse = await askAssistantGemini(userPrompt, tripContext);
+      if (realAiResponse && realAiResponse.success) {
+        return realAiResponse;
+      }
+    } catch (err) {
+      console.warn('TripMind AI: Edge Function assistant call failed, using heuristic fallback:', err);
+    }
+  }
+
+  // Graceful heuristic fallback
+  return askAssistantMock(userPrompt, tripContext);
+}
+
+/**
+ * Built-in heuristic assistant fallback
+ */
+export async function askAssistantMock(userPrompt, tripContext) {
   await new Promise((resolve) => setTimeout(resolve, 800));
 
   const lower = userPrompt.toLowerCase();
-  const days = tripContext.days || [];
-  const isIndia = tripContext.travelType === 'india' || tripContext.country === 'India';
-  const currencySymbol = isIndia ? '₹' : '$';
+  const days = tripContext?.days || [];
+  const isIndia = tripContext?.travelType === 'india' || tripContext?.country === 'India';
 
   let targetDayNumber = 1;
   const dayMatch = lower.match(/day\s*(\d+)/);
@@ -73,7 +100,7 @@ export async function askAssistant(userPrompt, tripContext) {
     }
   }
 
-  const targetDay = days.find(d => d.dayNumber === targetDayNumber) || days[0];
+  const targetDay = days.find((d) => d.dayNumber === targetDayNumber) || days[0];
   if (!targetDay) {
     return {
       success: false,
@@ -99,7 +126,7 @@ export async function askAssistant(userPrompt, tripContext) {
       time: '02:00 PM',
       title: isIndia ? 'Shaded Courtyard Chai & Regional Snacks' : 'Unhurried Terrace Cafe Downtime',
       category: 'Food & Relaxation',
-      location: `${targetDay.neighborhood || tripContext.city} Garden Enclave`,
+      location: `${targetDay.neighborhood || tripContext?.city || 'Central'} Garden Enclave`,
       description: 'Relax over fresh regional refreshments with ample time for reading and slow unwinding.',
       estimatedCost: isIndia ? 350 : 25,
       openingHours: '11:00 AM – 07:00 PM',
@@ -117,9 +144,9 @@ export async function askAssistant(userPrompt, tripContext) {
     actionDescription = `Cost-optimize Day ${targetDayNumber}`;
     explanation = `Swapped ticketed entry for scenic open-air promenades and delicious local street eateries.`;
     modifiedDay.title = `${targetDay.title} (Budget-Friendly)`;
-    modifiedDay.activities = modifiedDay.activities.map(act => ({
+    modifiedDay.activities = (modifiedDay.activities || []).map((act) => ({
       ...act,
-      estimatedCost: Math.round(act.estimatedCost * 0.4),
+      estimatedCost: Math.round((act.estimatedCost || 0) * 0.4),
       notes: 'AI Budget Optimized'
     }));
     afterSummary = `Same stops with zero-fee alternatives`;
@@ -128,12 +155,13 @@ export async function askAssistant(userPrompt, tripContext) {
   } else if (lower.includes('sunset') || lower.includes('viewpoint') || lower.includes('view')) {
     actionDescription = `Add a golden-hour sunset viewpoint to Day ${targetDayNumber}`;
     explanation = `Added a panoramic sunset terrace stop right before dinner.`;
-    modifiedDay.activities.splice(modifiedDay.activities.length - 1, 0, {
+    modifiedDay.activities = modifiedDay.activities || [];
+    modifiedDay.activities.splice(Math.max(0, modifiedDay.activities.length - 1), 0, {
       id: `assist-sunset-${Date.now()}`,
       time: '05:45 PM',
       title: isIndia ? 'Sunset Ghat / Fort High Point View' : 'Sunset Panoramic Rooftop Terrace',
       category: 'Sightseeing & Photography',
-      location: `${tripContext.city || tripContext.destination} Golden Hour Point`,
+      location: `${tripContext?.city || tripContext?.destination || 'Scenic'} Golden Hour Point`,
       description: 'Capture the golden hour light spilling over historic monuments and landscapes.',
       estimatedCost: 0,
       openingHours: '05:00 PM – 07:00 PM',
@@ -146,12 +174,13 @@ export async function askAssistant(userPrompt, tripContext) {
   } else if (lower.includes('eat') || lower.includes('food') || lower.includes('dinner')) {
     actionDescription = `Curate iconic local dining for Day ${targetDayNumber}`;
     explanation = `Added an authentic regional food tasting crawl showcasing signature local specialties.`;
+    modifiedDay.activities = modifiedDay.activities || [];
     modifiedDay.activities.push({
       id: `assist-food-${Date.now()}`,
       time: '08:30 PM',
       title: isIndia ? 'Legendary Street Food & Kebab Walk' : 'Late Night Artisan Bistro & Dessert',
       category: 'Food & Dining',
-      location: `${tripContext.city || tripContext.destination} Culinary Quarter`,
+      location: `${tripContext?.city || tripContext?.destination || 'Heritage'} Culinary Quarter`,
       description: 'Taste authentic recipes crafted by generational chefs using secret spice blends.',
       estimatedCost: isIndia ? 550 : 35,
       openingHours: '07:00 PM – 11:30 PM',
@@ -180,6 +209,6 @@ export async function askAssistant(userPrompt, tripContext) {
   };
 }
 
-// Compatibility alias
+// Compatibility aliases
 export const askTravelAssistant = askAssistant;
 export const modifyItinerary = (trip, instruction) => askAssistant(instruction, trip);
