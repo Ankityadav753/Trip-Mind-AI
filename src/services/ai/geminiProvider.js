@@ -10,6 +10,7 @@
 import { supabase, isSupabaseConfigured } from '../../lib/supabase.js';
 import { generateItineraryMock, regenerateDayMock } from './mockProvider.js';
 import { getDestinationWeather } from '../weatherService.js';
+import { calculateTripBudget } from '../budgetService.js';
 
 /**
  * Generates an optimized travel itinerary via the Supabase Edge Function gateway
@@ -93,12 +94,7 @@ export async function generateItineraryGemini(preferences) {
       aiProvider: raw.aiProvider || 'Google Gemini (via Supabase Gateway)',
       createdAt: raw.createdAt || new Date().toISOString(),
       weatherSummary,
-      budgetBreakdown: raw.budgetBreakdown || {
-        totalEstimated: 0,
-        currency: raw.currency || 'USD',
-        dailyAverage: 0,
-        categories: []
-      },
+      budgetBreakdown: calculateTripBudget(preferences, raw),
       days: raw.days.map((day, dIdx) => ({
         dayNumber: day.dayNumber || dIdx + 1,
         title: day.title || `Day ${dIdx + 1}`,

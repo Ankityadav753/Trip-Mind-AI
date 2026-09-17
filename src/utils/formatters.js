@@ -10,14 +10,33 @@ export const CURRENCY_RATES = {
   INR: { symbol: '₹', rate: 83.5, label: 'INR (₹)' },
 };
 
-export function formatCurrency(amountUSD, currency = 'USD') {
-  const meta = CURRENCY_RATES[currency] || CURRENCY_RATES.USD;
-  const converted = Math.round((Number(amountUSD) || 0) * meta.rate);
+export function formatCurrency(amount, currency = 'USD') {
+  const meta = CURRENCY_RATES[currency?.toUpperCase()] || CURRENCY_RATES.USD;
+  const num = Number.isFinite(Number(amount)) ? Math.max(0, Math.round(Number(amount))) : 0;
   
-  if (currency === 'JPY') {
-    return `${meta.symbol}${converted.toLocaleString()}`;
-  }
-  return `${meta.symbol}${converted.toLocaleString()}`;
+  const locale = currency?.toUpperCase() === 'INR' ? 'en-IN' : 'en-US';
+  return `${meta.symbol}${num.toLocaleString(locale)}`;
+}
+
+/**
+ * Explicit currency conversion utility.
+ * Currency conversion only occurs when explicitly invoked.
+ */
+export function convertCurrency(amount, fromCurrency = 'USD', toCurrency = 'INR') {
+  const num = Number(amount);
+  if (!Number.isFinite(num) || num < 0) return 0;
+  
+  const from = fromCurrency?.toUpperCase() || 'USD';
+  const to = toCurrency?.toUpperCase() || 'INR';
+  
+  if (from === to) return Math.round(num);
+
+  const fromMeta = CURRENCY_RATES[from] || CURRENCY_RATES.USD;
+  const toMeta = CURRENCY_RATES[to] || CURRENCY_RATES.INR;
+
+  // Convert to USD base, then to target currency
+  const inUSD = num / fromMeta.rate;
+  return Math.round(inUSD * toMeta.rate);
 }
 
 export function formatDateRange(startDateStr, endDateStr) {

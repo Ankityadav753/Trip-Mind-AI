@@ -15,6 +15,7 @@ import {
   regenerateDayGemini,
   askAssistantGemini
 } from './ai/geminiProvider';
+import { calculateTripBudget } from './budgetService.js';
 
 function getActiveProvider() {
   const provider = (import.meta.env.VITE_AI_PROVIDER || 'gemini').toLowerCase();
@@ -25,15 +26,26 @@ function getActiveProvider() {
 
 export async function generateItinerary(preferences) {
   const provider = getActiveProvider();
+  let trip;
   switch (provider) {
     case 'openai':
-      return generateItineraryOpenAI(preferences);
+      trip = await generateItineraryOpenAI(preferences);
+      break;
     case 'mock':
-      return generateItineraryMock(preferences);
+      trip = await generateItineraryMock(preferences);
+      break;
     case 'gemini':
     default:
-      return generateItineraryGemini(preferences);
+      trip = await generateItineraryGemini(preferences);
+      break;
   }
+
+  // Enforce deterministic Smart Estimated Budget Engine as SINGLE SOURCE OF TRUTH
+  if (trip) {
+    trip.budgetBreakdown = calculateTripBudget(preferences, trip);
+  }
+
+  return trip;
 }
 
 export async function regenerateDay(currentDay, tripContext, modificationType) {

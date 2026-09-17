@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useActiveTrip, useSavedTrips } from './useLocalStorage';
 import { generateItinerary, regenerateDay, askAssistant, generatePackingList } from '../services/travelPlannerService';
+import { calculateTripBudget } from '../services/budgetService.js';
 import { useToast } from './useToast';
 
 const USER_PREFS_KEY = 'tripmind_user_preferences';
@@ -153,6 +154,7 @@ export function useTripPlanner() {
       d.dayNumber === diffResult.dayNumber ? diffResult.proposedDay : d
     );
     const updatedTrip = { ...activeTrip, days: updatedDays };
+    updatedTrip.budgetBreakdown = calculateTripBudget(updatedTrip, updatedTrip);
     setActiveTrip(updatedTrip);
     addToast({
       type: 'success',

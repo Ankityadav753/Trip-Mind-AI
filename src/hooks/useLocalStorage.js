@@ -8,6 +8,7 @@ import {
   deleteTripFromSupabase,
   duplicateTripInSupabase
 } from '../services/tripService';
+import { ensureSmartBudget } from '../services/budgetService.js';
 
 const STORAGE_KEY = 'tripmind_saved_trips';
 const ACTIVE_TRIP_KEY = 'tripmind_active_trip';
@@ -27,7 +28,10 @@ export function useSavedTrips() {
   const getLocalTrips = () => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) return JSON.parse(stored);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return Array.isArray(parsed) ? parsed.map(t => ensureSmartBudget(t)) : [SAMPLE_ITINERARIES.paris];
+      }
       const initial = [SAMPLE_ITINERARIES.paris];
       localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
       return initial;
@@ -224,7 +228,7 @@ export function useActiveTrip() {
   const [activeTrip, setActiveTripState] = useState(() => {
     try {
       const stored = localStorage.getItem(ACTIVE_TRIP_KEY);
-      if (stored) return JSON.parse(stored);
+      if (stored) return ensureSmartBudget(JSON.parse(stored));
     } catch (e) {
       console.warn('Failed to read active trip', e);
     }

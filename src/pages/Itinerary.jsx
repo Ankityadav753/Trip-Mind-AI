@@ -25,6 +25,7 @@ import {
   deletePackingItemFromSupabase
 } from '../services/packingService';
 import { isUuid, fetchTripById } from '../services/tripService';
+import { ensureSmartBudget } from '../services/budgetService.js';
 
 export default function Itinerary() {
   const [searchParams] = useSearchParams();
@@ -56,9 +57,10 @@ export default function Itinerary() {
           try {
             const cloudTrip = await fetchTripById(tripIdParam);
             if (!isCancelled && cloudTrip) {
-              setCurrentTrip(cloudTrip);
-              setActiveTrip(cloudTrip);
-              if (cloudTrip.currency) setCurrency(cloudTrip.currency);
+              const sanitizedTrip = ensureSmartBudget(cloudTrip);
+              setCurrentTrip(sanitizedTrip);
+              setActiveTrip(sanitizedTrip);
+              if (sanitizedTrip.currency) setCurrency(sanitizedTrip.currency);
               setIsLoadingTrip(false);
               return;
             }
@@ -70,9 +72,10 @@ export default function Itinerary() {
         // 2. Fallback to loaded trips in context or localStorage
         const found = getTrip(tripIdParam);
         if (!isCancelled && found) {
-          setCurrentTrip(found);
-          setActiveTrip(found);
-          if (found.currency) setCurrency(found.currency);
+          const sanitizedFound = ensureSmartBudget(found);
+          setCurrentTrip(sanitizedFound);
+          setActiveTrip(sanitizedFound);
+          if (sanitizedFound.currency) setCurrency(sanitizedFound.currency);
           setIsLoadingTrip(false);
           return;
         }
@@ -81,8 +84,9 @@ export default function Itinerary() {
           setIsLoadingTrip(false);
         }
       } else if (activeTrip) {
-        setCurrentTrip(activeTrip);
-        if (activeTrip.currency) setCurrency(activeTrip.currency);
+        const sanitizedActive = ensureSmartBudget(activeTrip);
+        setCurrentTrip(sanitizedActive);
+        if (sanitizedActive.currency) setCurrency(sanitizedActive.currency);
         setIsLoadingTrip(false);
       } else {
         setIsLoadingTrip(false);

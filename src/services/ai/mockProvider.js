@@ -10,6 +10,7 @@ import { INDIA_BUDGET_TIERS, INTERNATIONAL_BUDGET_TIERS, TRIP_PACES } from '../.
 import { calculateDaysCount } from '../../utils/formatters';
 import { getDestinationWeather } from '../weatherService';
 import { optimizeDaySchedule } from '../../utils/itineraryOptimizer';
+import { calculateTripBudget } from '../budgetService.js';
 
 export async function generateItineraryMock(preferences) {
   // Simulate realistic AI synthesis latency (1.1s)
@@ -41,13 +42,9 @@ export async function generateItineraryMock(preferences) {
     matched = pool[0];
   }
 
-  // Calculate budget
+  // Build days
   const tierList = travelType === 'india' ? INDIA_BUDGET_TIERS : INTERNATIONAL_BUDGET_TIERS;
   const activeTier = tierList.find(t => t.id === budgetTier) || tierList[1];
-  const estDailySpend = activeTier.dailyMultiplier * totalTravelers;
-  const totalEstimated = estDailySpend * totalDays;
-
-  // Build days
   const days = [];
   for (let i = 1; i <= Math.min(totalDays, 12); i++) {
     days.push(createMockDay(matched, i, travelStyles, tripPace, activeTier.dailyMultiplier, transport));
@@ -59,8 +56,7 @@ export async function generateItineraryMock(preferences) {
   // Recommendations
   const recommendations = createMockRecommendations(matched, travelType);
 
-  // Return complete standardized trip schema
-  return {
+  const baseTrip = {
     id: `trip-${Date.now()}`,
     title: `${matched.city} AI Journey`,
     destination: `${matched.city}, ${matched.country}`,
@@ -87,21 +83,17 @@ export async function generateItineraryMock(preferences) {
     aiProvider: 'TripMind Mock Provider (Context-Engine v2)',
     createdAt: new Date().toISOString(),
     weatherSummary: weather,
-    budgetBreakdown: {
-      totalEstimated,
-      currency,
-      dailyAverage: Math.round(totalEstimated / totalDays),
-      categories: [
-        { name: 'Accommodation', amount: Math.round(totalEstimated * 0.42), percentage: 42, icon: 'Bed' },
-        { name: 'Food & Regional Dining', amount: Math.round(totalEstimated * 0.28), percentage: 28, icon: 'Utensils' },
-        { name: 'Activities & Monuments', amount: Math.round(totalEstimated * 0.16), percentage: 16, icon: 'Ticket' },
-        { name: 'Transportation & Cabs', amount: Math.round(totalEstimated * 0.08), percentage: 8, icon: 'Train' },
-        { name: 'Shopping & Misc', amount: Math.round(totalEstimated * 0.06), percentage: 6, icon: 'ShoppingBag' }
-      ]
-    },
     days,
     recommendations,
     packingList: generatePackingListMock({ destination: matched.city, travelStyles, durationDays: totalDays })
+  };
+
+  // Compute deterministic Smart Estimated Budget
+  const budgetBreakdown = calculateTripBudget(preferences, baseTrip);
+
+  return {
+    ...baseTrip,
+    budgetBreakdown
   };
 }
 

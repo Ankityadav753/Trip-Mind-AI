@@ -6,6 +6,7 @@
  */
 
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { ensureSmartBudget } from './budgetService.js';
 
 /**
  * Validates whether a string is a standard UUID v4
@@ -121,6 +122,8 @@ export function mapDbTripToClient(row) {
     days: sortedDays,
     isSupabase: true
   };
+
+  return ensureSmartBudget(trip);
 }
 
 /**
