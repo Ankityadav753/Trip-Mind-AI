@@ -162,7 +162,7 @@ export const INDIAN_DESTINATIONS = [
     hiddenGems: ['Vashistha Cave Meditation', 'Kunjapuri Sunrise Himalayan Peak', 'Patna Waterfall Rainforest Hike'],
     travelStyles: ['adventure', 'spiritual', 'wellness', 'nature'],
     sampleActivities: ['Grade III+ White Water Ganga Rafting', 'Evening Musical Ganga Aarti at Triveni Ghat', 'Riverside Yoga Session'],
-    image: 'https://images.unsplash.com/photo-1600100397608-f010f4439c28?auto=format&fit=crop&w=1000&q=80',
+    image: 'https://images.unsplash.com/photo-1607406374368-809f8ec7f118?auto=format&fit=crop&w=1000&q=80',
     tagline: 'Yoga Capital of the World on the Sacred Ganga'
   },
   {
@@ -262,7 +262,7 @@ export const INDIAN_DESTINATIONS = [
     hiddenGems: ['Manikarnika Ghat Contemplation', 'Chet Singh Fort Ghat', 'Ramnagar Fort Across River'],
     travelStyles: ['spiritual', 'culture', 'photography', 'food'],
     sampleActivities: ['Sunrise Boat Ride from Assi to Manikarnika', 'Spectacular Evening Ganga Maha Aarti', 'Labyrinth Alley Silk Saree Walk'],
-    image: 'https://images.unsplash.com/photo-1561361513-2d000a50f0dc?auto=format&fit=crop&w=1000&q=80',
+    image: 'https://images.unsplash.com/photo-1571536802807-30451e3955d8?auto=format&fit=crop&w=1000&q=80',
     tagline: 'The Sacred Oldest Living City of Light'
   },
   {
@@ -668,7 +668,7 @@ export const INDIAN_DESTINATIONS = [
     hiddenGems: ['Glenary’s Bakery terrace at dusk', 'Peace Pagoda & Japanese Temple', 'Rock Garden scenic drive'],
     travelStyles: ['nature', 'relaxation', 'culture', 'food'],
     sampleActivities: ['Dawn Tiger Hill view of Mt. Kanchenjunga turning golden', 'Heritage steam locomotive ride around Batasia Loop', 'Tea tasting masterclass'],
-    image: 'https://images.unsplash.com/photo-1622308644420-a7d0c3c6f05a?auto=format&fit=crop&w=1000&q=80',
+    image: 'https://images.unsplash.com/photo-1590256518627-c9f8a6855185?auto=format&fit=crop&w=1000&q=80',
     tagline: 'Champagne of Teas under the Snows of Kanchenjunga'
   },
   {
